@@ -5,9 +5,42 @@ body {
     margin: 0;
     padding: 20px;
     display: flex;
-    justify-content: center;
-    align-items: flex-start; /* Align items to the top */
+    flex-direction: column; 
+    align-items: center; 
     min-height: 100vh;
+}
+
+/* Scene Container */
+#scene-container {
+    margin-bottom: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 10px;
+    background-color: #ddd; 
+    border-radius: 8px;
+    box-shadow: 0 1px 5px rgba(0, 0, 0, 0.1);
+}
+
+#webgl-canvas {
+    display: block; 
+    background-color: #222; 
+    border: 1px solid #555;
+}
+
+#sound-button {
+    margin-top: 10px;
+    padding: 8px 15px;
+    background-color: #4CAF50; 
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+#sound-button:hover {
+    background-color: #45a049;
 }
 
 .container {
@@ -16,15 +49,15 @@ body {
     border-radius: 8px;
     box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
     display: grid;
-    grid-template-columns: 1fr 1fr; /* Two columns */
-    grid-template-rows: auto auto auto; /* Three rows */
+    grid-template-columns: 1fr 1fr; 
+    grid-template-rows: auto auto auto; 
     gap: 20px;
     max-width: 900px;
     width: 100%;
 }
 
 h2 {
-    color: #1877f2; /* Facebook blue */
+    color: #1877f2; 
     border-bottom: 1px solid #dddfe2;
     padding-bottom: 10px;
     margin-top: 0;
@@ -32,8 +65,8 @@ h2 {
 
 /* Appreciation Section */
 .appreciation-section {
-    grid-column: 1 / 2; /* Span first column */
-    grid-row: 1 / 2; /* Span first row */
+    grid-column: 1 / 2; 
+    grid-row: 1 / 2; 
     text-align: center;
 }
 
@@ -64,11 +97,11 @@ h2 {
 
 /* Activity Section */
 .activity-section {
-    grid-column: 2 / 3; /* Span second column */
-    grid-row: 1 / 3; /* Span first and second row */
-    max-height: 350px; /* Limit height */
-    overflow-y: auto; /* Add scroll if content exceeds height */
-    padding-right: 10px; /* Space for scrollbar */
+    grid-column: 2 / 3; 
+    grid-row: 1 / 3; 
+    max-height: 350px; 
+    overflow-y: auto; 
+    padding-right: 10px; 
     border-left: 1px solid #dddfe2;
     padding-left: 20px;
 }
@@ -100,11 +133,11 @@ h2 {
 
 /* Chat Section */
 .chat-section {
-    grid-column: 1 / 2; /* Span first column */
-    grid-row: 2 / 4; /* Span second and third row */
+    grid-column: 1 / 2; 
+    grid-row: 2 / 4; 
     display: flex;
     flex-direction: column;
-    max-height: 500px; /* Combined height limit */
+    max-height: 500px; 
 }
 
 #chat-messages {
@@ -115,7 +148,7 @@ h2 {
     margin-bottom: 10px;
     background-color: #f9f9f9;
     border-radius: 4px;
-    min-height: 200px; /* Ensure it has some height */
+    min-height: 200px; 
 }
 
 .chat-message {
@@ -149,7 +182,7 @@ h2 {
     color: #666;
 }
 .chat-message.own-message .message-author {
-    color: #ccc; /* Lighter color for own messages */
+    color: #ccc; 
 }
 
 
@@ -181,11 +214,11 @@ h2 {
 
 /* Users Section */
 .users-section {
-    grid-column: 2 / 3; /* Span second column */
-    grid-row: 3 / 4; /* Span third row */
-    max-height: 150px; /* Limit height */
-    overflow-y: auto; /* Add scroll if content exceeds height */
-    padding-right: 10px; /* Space for scrollbar */
+    grid-column: 2 / 3; 
+    grid-row: 3 / 4; 
+    max-height: 150px; 
+    overflow-y: auto; 
+    padding-right: 10px; 
      border-left: 1px solid #dddfe2;
     padding-left: 20px;
 }
@@ -209,4 +242,3 @@ h2 {
     border-radius: 50%;
     margin-right: 8px;
 }
-
