@@ -5,9 +5,10 @@ body {
     margin: 0;
     padding: 20px;
     display: flex;
-    flex-direction: column; 
-    align-items: center; 
+    flex-direction: column;
+    align-items: center;
     min-height: 100vh;
+    overflow-x: hidden; /* Prevent horizontal scroll */
 }
 
 /* Scene Container */
@@ -17,21 +18,27 @@ body {
     flex-direction: column;
     align-items: center;
     padding: 10px;
-    background-color: #ddd; 
+    background-color: #eee;
     border-radius: 8px;
     box-shadow: 0 1px 5px rgba(0, 0, 0, 0.1);
+    width: 90%; /* Take up most of the width */
+    max-width: 1000px; /* Limit max width */
+    box-sizing: border-box;
 }
 
 #webgl-canvas {
-    display: block; 
-    background-color: #222; 
-    border: 1px solid #555;
+    display: block; /* Needed for width/height */
+    border: 1px solid #ccc;
+    width: 100%; /* Fill the container width */
+    /* Height will be set by SceneManager based on aspect ratio */
+    max-height: 60vh; /* Limit canvas height */
+    background-color: #87ceeb; /* Match scene background */
 }
 
 #sound-button {
     margin-top: 10px;
     padding: 8px 15px;
-    background-color: #4CAF50; 
+    background-color: #4CAF50;
     color: white;
     border: none;
     border-radius: 4px;
@@ -49,15 +56,16 @@ body {
     border-radius: 8px;
     box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
     display: grid;
-    grid-template-columns: 1fr 1fr; 
-    grid-template-rows: auto auto auto; 
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto auto auto;
     gap: 20px;
-    max-width: 900px;
-    width: 100%;
+    max-width: 1000px; /* Match scene container max width */
+    width: 90%; /* Match scene container width */
+    box-sizing: border-box;
 }
 
 h2 {
-    color: #1877f2; 
+    color: #1877f2;
     border-bottom: 1px solid #dddfe2;
     padding-bottom: 10px;
     margin-top: 0;
@@ -65,8 +73,8 @@ h2 {
 
 /* Appreciation Section */
 .appreciation-section {
-    grid-column: 1 / 2; 
-    grid-row: 1 / 2; 
+    grid-column: 1 / 2;
+    grid-row: 1 / 2;
     text-align: center;
 }
 
@@ -82,11 +90,12 @@ h2 {
     width: 50px;
     height: 50px;
     fill: red;
-    transition: transform 0.2s ease-in-out;
+    transition: transform 0.2s ease-in-out; /* Keep base transition */
 }
 
 #heart-container:hover .heart {
-    transform: scale(1.1);
+    /* Keep hover scale or remove if click animation is enough */
+    /* transform: scale(1.1); */
 }
 
 #heart-count {
@@ -97,11 +106,11 @@ h2 {
 
 /* Activity Section */
 .activity-section {
-    grid-column: 2 / 3; 
-    grid-row: 1 / 3; 
-    max-height: 350px; 
-    overflow-y: auto; 
-    padding-right: 10px; 
+    grid-column: 2 / 3;
+    grid-row: 1 / 3;
+    max-height: 350px;
+    overflow-y: auto;
+    padding-right: 10px;
     border-left: 1px solid #dddfe2;
     padding-left: 20px;
 }
@@ -128,16 +137,17 @@ h2 {
     border-radius: 50%;
     margin-right: 8px;
     vertical-align: middle;
+    flex-shrink: 0; /* Prevent avatar shrinking */
 }
-
 
 /* Chat Section */
 .chat-section {
-    grid-column: 1 / 2; 
-    grid-row: 2 / 4; 
+    grid-column: 1 / 2;
+    grid-row: 2 / 4;
     display: flex;
     flex-direction: column;
-    max-height: 500px; 
+    max-height: 500px; /* Limit height */
+    min-height: 300px; /* Ensure minimum space */
 }
 
 #chat-messages {
@@ -148,7 +158,7 @@ h2 {
     margin-bottom: 10px;
     background-color: #f9f9f9;
     border-radius: 4px;
-    min-height: 200px; 
+    min-height: 150px; /* Ensure some visible space */
 }
 
 .chat-message {
@@ -162,13 +172,23 @@ h2 {
     height: 30px;
     border-radius: 50%;
     margin-right: 10px;
+    flex-shrink: 0;
+}
+
+.chat-message .message-content-wrapper {
+    display: flex;
+    flex-direction: column;
+    max-width: calc(100% - 40px); /* Prevent overflow with avatar */
 }
 
 .chat-message .message-content {
     background-color: #e9ebee;
     padding: 8px 12px;
     border-radius: 18px;
-    max-width: 80%;
+    /* max-width: 100%; */ /* Wrapper handles width */
+    word-wrap: break-word;
+    width: fit-content; /* Make bubble fit content */
+    max-width: 100%; /* Allow wrapping within the fit-content */
 }
 .chat-message.own-message .message-content {
     background-color: #1877f2;
@@ -181,10 +201,19 @@ h2 {
     margin-bottom: 3px;
     color: #666;
 }
-.chat-message.own-message .message-author {
-    color: #ccc; 
+.chat-message.own-message {
+     flex-direction: row-reverse;
 }
-
+.chat-message.own-message .user-avatar {
+    margin-left: 10px;
+    margin-right: 0;
+}
+.chat-message.own-message .message-content-wrapper {
+    align-items: flex-end;
+}
+.chat-message.own-message .message-content {
+     text-align: right; /* Align text right in own bubbles */
+}
 
 .chat-input {
     display: flex;
@@ -214,11 +243,11 @@ h2 {
 
 /* Users Section */
 .users-section {
-    grid-column: 2 / 3; 
-    grid-row: 3 / 4; 
-    max-height: 150px; 
-    overflow-y: auto; 
-    padding-right: 10px; 
+    grid-column: 2 / 3;
+    grid-row: 3 / 4;
+    max-height: 150px;
+    overflow-y: auto;
+    padding-right: 10px;
      border-left: 1px solid #dddfe2;
     padding-left: 20px;
 }
@@ -241,4 +270,30 @@ h2 {
     height: 24px;
     border-radius: 50%;
     margin-right: 8px;
+    flex-shrink: 0; /* Prevent avatar shrinking */
+}
+
+/* Responsive adjustments for smaller screens */
+@media (max-width: 768px) {
+    .container {
+        grid-template-columns: 1fr; /* Stack columns */
+        grid-template-rows: auto; /* Reset rows */
+        max-width: 95%;
+        width: 95%;
+        padding: 15px;
+    }
+
+    /* Adjust grid item order/spanning if needed */
+    .appreciation-section { grid-row: auto; grid-column: auto; }
+    .activity-section { grid-row: auto; grid-column: auto; border-left: none; padding-left: 0; max-height: 250px; }
+    .chat-section { grid-row: auto; grid-column: auto; max-height: 400px; min-height: 250px;}
+    .users-section { grid-row: auto; grid-column: auto; border-left: none; padding-left: 0; max-height: 120px;}
+
+    #scene-container {
+        width: 95%;
+    }
+
+     h2 {
+         font-size: 1.2em;
+     }
 }

@@ -1,7 +1,8 @@
 import * as C from './config.js';
-import * as THREE from 'three';
-// Import OrbitControls for camera movement
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+// Import THREE only if needed directly in this file, otherwise handled by SceneManager
+// import * as THREE from 'three';
+// Removed OrbitControls import, now handled by scene.js
+import { SceneManager } from './scene.js'; // Import the new SceneManager
 
 const room = new WebsimSocket();
 
@@ -14,7 +15,7 @@ const chatInputField = document.getElementById('chat-input-field');
 const sendButton = document.getElementById('send-button');
 const userList = document.getElementById('user-list');
 
-// New 3D/Audio Elements
+// 3D/Audio Elements
 const canvas = document.getElementById('webgl-canvas');
 const soundButton = document.getElementById('sound-button');
 
@@ -23,9 +24,8 @@ const MAX_ACTIVITY_ITEMS = C.MAX_ACTIVITY_ITEMS;
 const MAX_CHAT_MESSAGES = C.MAX_CHAT_MESSAGES;
 
 // --- 3D Scene Variables ---
-let scene, camera, renderer, controls;
-let groundPlane;
-const playerModels = {}; // Map clientId to player model (THREE.Group)
+// Moved to SceneManager: scene, camera, renderer, controls, groundPlane, playerModels, clock
+let sceneManager; // Instance of the SceneManager class
 const keyboardState = {}; // Track pressed keys
 
 // --- Audio Variables ---
@@ -35,8 +35,9 @@ let gainNode;
 
 // --- Initialization ---
 async function initialize() {
-    // Initialize 3D Scene
-    initThreeJS();
+    // Initialize 3D Scene using SceneManager
+    sceneManager = new SceneManager(canvas);
+    sceneManager.init();
 
     // Initialize Audio
     initAudio();
@@ -44,18 +45,17 @@ async function initialize() {
     // Initialize Websim Room
     await room.initialize();
 
-    // Initialize own presence with position
+    // Initialize own presence with position and color
     room.updatePresence({
-        x: 0,
+        x: Math.random() * 10 - 5, // Start in a small random area
         y: C.PLAYER_HEIGHT / 2, // Start slightly above ground
-        z: 0,
-        rotationY: 0,
-        color: `#${Math.floor(Math.random()*16777215).toString(16)}` // Assign random color
+        z: Math.random() * 10 - 5,
+        rotationY: Math.random() * Math.PI * 2,
+        color: `#${Math.floor(Math.random()*16777215).toString(16).padStart(6, '0')}` // Assign random color, ensure 6 digits
     });
 
-
     // Initialize room state if it doesn't exist
-    if (!room.roomState.heartClicks) {
+    if (room.roomState.heartClicks === undefined) {
         room.updateRoomState({ heartClicks: 0 });
     }
     if (!room.roomState.chatHistory) {
@@ -87,127 +87,34 @@ async function initialize() {
 
     // --- Subscriptions ---
     room.subscribeRoomState(handleRoomStateUpdate);
-    room.subscribePresence(handlePresenceUpdate);
+    room.subscribePresence(handlePresenceUpdate); // This will now handle adding/updating models via SceneManager
 
-    // Add initial join activity (after presence is set)
-    logActivity(`${room.peers[room.clientId].username} joined.`);
+    // Add initial join activity (after presence is set and peer info is available)
+    // Use a slight delay to ensure peer data is likely populated
+    setTimeout(() => {
+         if(room.peers[room.clientId]) {
+             logActivity(`${room.peers[room.clientId].username} joined.`);
+         }
+    }, 500);
+
 
     // Start 3D animation loop
     animate();
 }
 
 // --- 3D Scene Setup ---
-function initThreeJS() {
-    scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x87ceeb); // Sky blue background
-
-    // Camera
-    camera = new THREE.PerspectiveCamera(75, canvas.width / canvas.height, 0.1, 2000);
-    camera.position.set(0, 5, 10); // Position camera to see the scene
-
-    // Renderer
-    renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true }); // Enable antialias for smoother models
-    renderer.setSize(canvas.width, canvas.height);
-    renderer.shadowMap.enabled = true; // Enable shadows
-
-    // Controls - Allow camera rotation/zoom
-    controls = new OrbitControls(camera, renderer.domElement);
-    controls.enableDamping = true; // Smooth camera movement
-    controls.dampingFactor = 0.05;
-    controls.screenSpacePanning = false;
-    controls.minDistance = 2;
-    controls.maxDistance = 50;
-    controls.maxPolarAngle = Math.PI / 2 - 0.05; // Prevent camera going below ground
-
-    // Basic Lighting
-    const ambientLight = new THREE.AmbientLight(0xcccccc, 0.5);
-    scene.add(ambientLight);
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
-    directionalLight.position.set(5, 10, 7.5);
-    directionalLight.castShadow = true; // Enable shadow casting
-    directionalLight.shadow.mapSize.width = 1024;
-    directionalLight.shadow.mapSize.height = 1024;
-    directionalLight.shadow.camera.near = 0.5;
-    directionalLight.shadow.camera.far = 50;
-    scene.add(directionalLight);
-
-    // Ground Plane (Large and Flat)
-    const groundGeometry = new THREE.PlaneGeometry(1000, 1000); // Large plane
-    const groundMaterial = new THREE.MeshStandardMaterial({
-        color: 0x228b22, // Forest green
-        roughness: 0.9,
-        metalness: 0.1
-    });
-    groundPlane = new THREE.Mesh(groundGeometry, groundMaterial);
-    groundPlane.rotation.x = -Math.PI / 2; // Rotate to be horizontal
-    groundPlane.receiveShadow = true; // Allow ground to receive shadows
-    scene.add(groundPlane);
-
-    // Fog for "infinite" feel
-    scene.fog = new THREE.Fog(0x87ceeb, 50, 250);
-}
-
-// --- Player Model Creation ---
-function createPlayerModel(color = 0xffffff) {
-    const group = new THREE.Group();
-
-    const bodyHeight = C.PLAYER_HEIGHT * 0.7;
-    const headRadius = C.PLAYER_HEIGHT * 0.15;
-    const bodyRadius = C.PLAYER_HEIGHT * 0.1;
-
-    // Body (Capsule-like: Cylinder + two Spheres)
-    const bodyMaterial = new THREE.MeshStandardMaterial({
-        color: color,
-        roughness: 0.6,
-        metalness: 0.2,
-    });
-
-    const bodyGeometry = new THREE.CylinderGeometry(bodyRadius, bodyRadius, bodyHeight, 16);
-    const bodyMesh = new THREE.Mesh(bodyGeometry, bodyMaterial);
-    bodyMesh.castShadow = true;
-    bodyMesh.receiveShadow = true;
-    group.add(bodyMesh); // Body centered at group origin for now
-
-    // Head (Sphere)
-    const headGeometry = new THREE.SphereGeometry(headRadius, 16, 12);
-    const headMesh = new THREE.Mesh(headGeometry, bodyMaterial);
-    headMesh.position.y = (bodyHeight / 2) + headRadius * 0.9; // Position head on top of body
-    headMesh.castShadow = true;
-    group.add(headMesh);
-
-    // Direction Indicator (optional, simple triangle)
-    const indicatorGeometry = new THREE.ConeGeometry(headRadius * 0.5, headRadius, 3);
-    const indicatorMaterial = new THREE.MeshBasicMaterial({ color: 0x333333 });
-    const indicatorMesh = new THREE.Mesh(indicatorGeometry, indicatorMaterial);
-    indicatorMesh.position.y = headMesh.position.y; // Same height as head
-    indicatorMesh.position.z = bodyRadius + 0.01; // Slightly in front of body
-    indicatorMesh.rotation.x = Math.PI / 2;
-    group.add(indicatorMesh);
-
-
-    // Adjust group pivot point if needed (e.g., to be at the base)
-    // group.position.y = C.PLAYER_HEIGHT / 2; // This is handled by setting presence y
-
-    return group;
-}
+// Function `initThreeJS` removed - logic moved to SceneManager
+// Function `createPlayerModel` removed - logic moved to SceneManager
 
 
 // --- 3D Animation Loop ---
-const clock = new THREE.Clock();
+// Variable `clock` removed - managed by SceneManager
 function animate() {
     requestAnimationFrame(animate);
-    const delta = clock.getDelta(); // Time since last frame
+    // const delta = clock.getDelta(); // Delta time now handled within SceneManager.update()
 
-    handleMovement(delta); // Process local player movement based on keyboard state
-    controls.update(); // Update camera controls
-
-    // Simple animation for player models (e.g., slight bobbing) - could be added here
-    Object.values(playerModels).forEach(model => {
-        // Example: model.position.y += Math.sin(Date.now() * 0.005) * 0.005;
-    });
-
-
-    renderer.render(scene, camera);
+    handleMovement(); // Process local player movement based on keyboard state & update presence
+    sceneManager.update(); // Update and render the scene (handles controls, animations, rendering)
 }
 
 // --- Audio Setup ---
@@ -255,15 +162,15 @@ function playSound() {
 // --- State Update Handlers ---
 function handleRoomStateUpdate(newState) {
     // Update Heart
-    if (newState.heartClicks !== undefined) {
+    if (newState.heartClicks !== undefined && newState.heartClicks !== room.roomState.heartClicks) {
         updateHeartDisplay(newState.heartClicks);
     }
     // Update Chat
-    if (newState.chatHistory) {
+    if (newState.chatHistory && newState.chatHistory !== room.roomState.chatHistory) { // Basic check for changes
         renderChatHistory();
     }
     // Update Activity
-    if (newState.activityLog) {
+    if (newState.activityLog && newState.activityLog !== room.roomState.activityLog) { // Basic check for changes
         renderActivityLog();
     }
 }
@@ -272,52 +179,26 @@ function handlePresenceUpdate(newPresence) {
     updateUserList(); // Update connected user list UI
 
     const currentClientIds = Object.keys(newPresence);
-    const existingModelIds = Object.keys(playerModels);
+    const knownModelIds = sceneManager ? Object.keys(playerModels) : []; // playerModels is now internal to sceneManager
 
-    // Add/Update players
+    // Use Set for efficient lookup
+    const currentClientIdsSet = new Set(currentClientIds);
+
+    // Add/Update players using SceneManager
     currentClientIds.forEach(clientId => {
         const playerData = newPresence[clientId];
-        if (!playerData || playerData.x === undefined) return; // Skip if presence data is incomplete
-
-        if (playerModels[clientId]) {
-            // Update existing model
-            const model = playerModels[clientId];
-            model.position.set(playerData.x, playerData.y, playerData.z);
-            model.rotation.y = playerData.rotationY || 0;
-            // Update color if changed (optional)
-             if (playerData.color && model.userData.color !== playerData.color) {
-                 const bodyMaterial = model.children[0].material; // Assuming body is first child
-                 bodyMaterial.color.set(playerData.color);
-                 model.userData.color = playerData.color;
-             }
-
-        } else {
-            // Create new model for new player
-            console.log(`Creating model for ${clientId}`);
-            const playerModel = createPlayerModel(playerData.color || '#ffffff');
-            playerModel.position.set(playerData.x, playerData.y, playerData.z);
-            playerModel.rotation.y = playerData.rotationY || 0;
-            playerModel.userData.color = playerData.color; // Store color for comparison
-            scene.add(playerModel);
-            playerModels[clientId] = playerModel;
+        if (sceneManager && playerData) { // Ensure sceneManager is initialized
+             sceneManager.addOrUpdatePlayer(clientId, playerData);
         }
     });
 
-    // Remove players who left
-    existingModelIds.forEach(clientId => {
-        if (!newPresence[clientId]) {
-            console.log(`Removing model for ${clientId}`);
-            const modelToRemove = playerModels[clientId];
-            scene.remove(modelToRemove);
-            // Dispose geometry/material if needed
-            modelToRemove.traverse(child => {
-                if (child.isMesh) {
-                    child.geometry.dispose();
-                    child.material.dispose();
-                }
-            });
-            delete playerModels[clientId];
-            logActivity(`${room.peers[clientId]?.username || 'Someone'} left.`); // Log leaving
+    // Remove players who left using SceneManager
+    const modelsToRemove = Object.keys(playerModels).filter(id => !currentClientIdsSet.has(id));
+    modelsToRemove.forEach(clientId => {
+        if (sceneManager) { // Ensure sceneManager is initialized
+            const peerUsername = room.peers[clientId]?.username || 'Someone';
+            logActivity(`${peerUsername} left.`); // Log leaving
+            sceneManager.removePlayer(clientId);
         }
     });
 }
@@ -332,6 +213,9 @@ function updateHeartDisplay(clicks) {
 }
 
 function renderChatHistory() {
+    const scrollBefore = chatMessages.scrollHeight - chatMessages.scrollTop; // Preserve scroll unless near bottom
+    const isScrolledToBottom = scrollBefore < chatMessages.clientHeight + 50; // Tolerance
+
     chatMessages.innerHTML = ''; // Clear existing messages
     const history = room.roomState.chatHistory || {};
     const sortedMessages = Object.values(history)
@@ -339,7 +223,12 @@ function renderChatHistory() {
         .sort((a, b) => a.timestamp - b.timestamp); // Sort by timestamp ASC
 
     sortedMessages.slice(-MAX_CHAT_MESSAGES).forEach(addChatMessageToDOM); // Display latest N messages
-    chatMessages.scrollTop = chatMessages.scrollHeight; // Scroll to bottom
+
+    if (isScrolledToBottom) {
+        chatMessages.scrollTop = chatMessages.scrollHeight; // Scroll to bottom
+    } else {
+         chatMessages.scrollTop = chatMessages.scrollHeight - scrollBefore; // Restore scroll position
+    }
 }
 
 function renderActivityLog() {
@@ -393,11 +282,11 @@ function handleHeartClick() {
     updateHeartDisplay(currentTotalClicks);
     // Add subtle animation
     heartIcon.style.transition = 'transform 0.1s ease-in-out';
-    heartIcon.style.transform += ' scale(1.1)';
+    heartIcon.style.transform = `scale(${1 + Math.min(currentTotalClicks * 0.01, 1) + 0.1})`; // Apply scale based on new count + bump
     setTimeout(() => {
         // Reset transition for next click scaling
         heartIcon.style.transition = 'transform 0.2s ease-in-out';
-        updateHeartDisplay(room.roomState.heartClicks || currentTotalClicks); // Ensure sync after animation
+        updateHeartDisplay(room.roomState.heartClicks || currentTotalClicks); // Ensure sync after animation based on actual state
     }, 100);
 
     // Update shared state
@@ -407,13 +296,15 @@ function handleHeartClick() {
 
     // Log activity (only log once per session threshold to avoid spam)
     if (localHeartClicks === 1 || localHeartClicks % 5 === 0) { // Log first click and every 5th
-        logActivity(`${room.peers[room.clientId].username} showed appreciation! ❤️`);
+         if(room.peers[room.clientId]) {
+            logActivity(`${room.peers[room.clientId].username} showed appreciation! ❤️`);
+         }
     }
 }
 
 function sendChatMessage() {
     const messageText = chatInputField.value.trim();
-    if (!messageText) return;
+    if (!messageText || !room.peers[room.clientId]) return;
 
     const messageId = `msg-${room.clientId}-${Date.now()}`;
     const newMessage = {
@@ -425,11 +316,13 @@ function sendChatMessage() {
         timestamp: Date.now()
     };
 
-    // Update room state with the new message using its ID as the key
+    // Use functional update for room state if necessary to avoid race conditions,
+    // but simple update is usually fine here.
+    const currentChatHistory = room.roomState.chatHistory || {};
     room.updateRoomState({
         chatHistory: {
-            ...room.roomState.chatHistory, // Keep existing messages
-            [messageId]: newMessage // Add the new message
+            ...currentChatHistory,
+            [messageId]: newMessage
         }
     });
 
@@ -437,11 +330,19 @@ function sendChatMessage() {
     logActivity(`${newMessage.username} sent a message.`);
 
     chatInputField.value = ''; // Clear input field
+    // Optionally re-render immediately for local user
+    // addChatMessageToDOM(newMessage);
+    // chatMessages.scrollTop = chatMessages.scrollHeight;
+    // Note: The subscription will trigger a re-render anyway
 }
 
 function logActivity(text) {
+    if (!room.clientId || !room.peers[room.clientId]) {
+        console.warn("Cannot log activity, client info not ready.");
+        return;
+    }
     const activityId = `act-${room.clientId}-${Date.now()}`;
-    const currentUser = room.peers[room.clientId] || { username: 'System', avatarUrl: ''}; // Handle case where peer might not be ready?
+    const currentUser = room.peers[room.clientId];
     const newActivity = {
         id: activityId,
         clientId: room.clientId, // Store who triggered the activity
@@ -458,20 +359,19 @@ function logActivity(text) {
     };
 
     // Prune old activities if exceeding max count
-    const activityKeys = Object.keys(updatedActivityLog).filter(k => updatedActivityLog[k]); // Filter out null keys
-    if (activityKeys.length > MAX_ACTIVITY_ITEMS) {
-        // Find the oldest activity based on timestamp
-        const sortedActivities = Object.values(updatedActivityLog)
-            .filter(act => act)
-            .sort((a, b) => a.timestamp - b.timestamp);
-        if (sortedActivities.length > MAX_ACTIVITY_ITEMS) {
-            const oldestActivityId = sortedActivities[0].id;
-            // Set the oldest activity to null to remove it effectively
-            updatedActivityLog[oldestActivityId] = null;
-        }
+    const activityEntries = Object.entries(updatedActivityLog).filter(([, act]) => act); // Filter out null entries
+    if (activityEntries.length > MAX_ACTIVITY_ITEMS) {
+        // Sort by timestamp ASC to find the oldest
+        activityEntries.sort(([, a], [, b]) => a.timestamp - b.timestamp);
+        const oldestActivityId = activityEntries[0][0]; // Get the ID (key) of the oldest
+        updatedActivityLog[oldestActivityId] = null; // Set to null to remove
     }
 
+
     room.updateRoomState({ activityLog: updatedActivityLog });
+     // Optionally re-render immediately for local user
+    // addActivityToDOM(newActivity);
+    // Note: The subscription will trigger a re-render anyway
 }
 
 
@@ -486,7 +386,14 @@ function handleKeyUp(event) {
     keyboardState[event.code] = false;
 }
 
-function handleMovement(deltaTime) {
+// Debounce presence updates to avoid overwhelming the network
+let lastPresenceUpdateTime = 0;
+const PRESENCE_UPDATE_INTERVAL = 1000 / 20; // Target ~20 updates per second
+
+function handleMovement() {
+    // We need deltaTime for consistent movement speed
+    const deltaTime = sceneManager.clock.getDelta(); // Get delta from SceneManager's clock
+
     if (!room.clientId || !room.presence[room.clientId]) return; // Ensure presence is initialized
 
     const currentPresence = room.presence[room.clientId];
@@ -510,34 +417,55 @@ function handleMovement(deltaTime) {
 
     // Forward/Backward Movement (relative to current rotation)
     if (keyboardState['KeyW'] || keyboardState['ArrowUp']) {
+        // Move forward along the current direction vector (cos(angle) for Z, sin(angle) for X)
         dx += Math.sin(rotationY) * moveDistance;
         dz += Math.cos(rotationY) * moveDistance;
         moved = true;
     }
     if (keyboardState['KeyS'] || keyboardState['ArrowDown']) {
+         // Move backward along the current direction vector
         dx -= Math.sin(rotationY) * moveDistance;
         dz -= Math.cos(rotationY) * moveDistance;
         moved = true;
     }
 
-     // Basic collision detection with ground (simple clamp) - Replace with better physics later if needed
-    const newX = currentPresence.x + dx;
-    const newZ = currentPresence.z + dz;
-
-    // Boundary check (optional, based on plane size)
-    const maxCoord = 490; // Slightly less than half plane size
-    const clampedX = Math.max(-maxCoord, Math.min(maxCoord, newX));
-    const clampedZ = Math.max(-maxCoord, Math.min(maxCoord, newZ));
-
-
     if (moved) {
-        room.updatePresence({
-            ...currentPresence, // Keep existing properties like color
-            x: clampedX,
-            // y is fixed for flat terrain, maybe add jumping later
-            z: clampedZ,
-            rotationY: rotationY
-        });
+        const newX = currentPresence.x + dx;
+        const newZ = currentPresence.z + dz;
+
+        // Boundary check (optional, based on plane size) - adjust if needed
+        const maxCoord = 490; // Slightly less than half plane size
+        const clampedX = Math.max(-maxCoord, Math.min(maxCoord, newX));
+        const clampedZ = Math.max(-maxCoord, Math.min(maxCoord, newZ));
+
+        // Check if enough time has passed since the last update
+        const now = performance.now();
+        if (now - lastPresenceUpdateTime > PRESENCE_UPDATE_INTERVAL) {
+            room.updatePresence({
+                // Only send updated fields to minimize data transfer
+                x: clampedX,
+                z: clampedZ,
+                rotationY: rotationY
+                // Note: y and color are not updated here, they are set initially
+                // or via other means if needed. Websim merges updates.
+            });
+            lastPresenceUpdateTime = now;
+
+             // Also update the local model immediately for responsiveness,
+             // even though the subscription will update it again shortly.
+             // The sceneManager lerps, so this is less critical, but good practice.
+             if (sceneManager && playerModels[room.clientId]) {
+                 const localModel = playerModels[room.clientId];
+                 localModel.position.set(clampedX, currentPresence.y, clampedZ);
+                 localModel.rotation.y = rotationY;
+                 localModel.userData.moving = true; // Set moving flag for animation
+             }
+        }
+    } else {
+         // Ensure the moving flag is false if no keys are pressed
+         if (sceneManager && playerModels[room.clientId]) {
+             playerModels[room.clientId].userData.moving = false;
+         }
     }
 }
 
@@ -559,7 +487,7 @@ function addChatMessageToDOM(message) {
     avatar.classList.add('user-avatar');
 
     const contentDiv = document.createElement('div');
-    contentDiv.classList.add('message-content-wrapper'); // Optional wrapper if needed
+    contentDiv.classList.add('message-content-wrapper');
 
     const authorSpan = document.createElement('div');
     authorSpan.classList.add('message-author');
